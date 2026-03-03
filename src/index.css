@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --color-manor-900: #0c0a1a;
+  --color-manor-800: #1a1333;
+  --color-manor-700: #2d1f54;
+  --color-manor-600: #3d2b6b;
+  --color-manor-500: #5b3fa0;
+  --color-manor-400: #7c5cc7;
+  --color-manor-300: #a78bfa;
+  --color-manor-purple: #9333ea;
+  --color-manor-blue: #3b82f6;
+  --color-manor-yellow: #eab308;
+  --color-manor-red: #ef4444;
+  --color-manor-green: #10b981;
+  --color-manor-gold: #f59e0b;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(135deg, #0c0a1a 0%, #1a1333 40%, #2d1f54 70%, #0c0a1a 100%);
+  color: #e2e8f0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(147,51,234,0.4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(147,51,234,0.6);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(147,51,234,0.3); }
+  50% { box-shadow: 0 0 25px rgba(147,51,234,0.6); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
+.animate-slideUp { animation: slideUp 0.6s ease-out forwards; }
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(147,51,234,0.15) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+.animate-float { animation: float 3s ease-in-out infinite; }
+
+/* Glass effect */
+.glass {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.glass-strong {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.15);
+}
