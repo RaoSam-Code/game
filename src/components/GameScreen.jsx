@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useGameState } from '../game/gameState';
-import { SUSPECTS, SUSPECT_ORDER } from '../game/suspects';
+import { makeAccusation } from '../ai/claudeAPI';
 import { playAccusationDrum } from '../audio/soundEffects';
 import SuspectCard from './SuspectCard';
 import ChatInterface from './ChatInterface';
@@ -8,11 +8,20 @@ import CaseFile from './CaseFile';
 import Timer from './Timer';
 
 function AccusationModal({ onClose }) {
-    const { state, dispatch } = useGameState();
+    const { state, dispatch, showToast } = useGameState();
+    const [accusing, setAccusing] = useState(false);
 
-    const handleAccuse = (suspectId) => {
+    const handleAccuse = async (suspectId) => {
+        setAccusing(true);
         if (state.soundEnabled) playAccusationDrum();
-        dispatch({ type: 'ACCUSE', payload: suspectId });
+
+        try {
+            const result = await makeAccusation(state.sessionId, suspectId);
+            dispatch({ type: 'SET_ACCUSATION_RESULT', payload: result });
+        } catch (err) {
+            showToast(`⚠️ ${err.message}`);
+            setAccusing(false);
+        }
     };
 
     return (
@@ -20,28 +29,27 @@ function AccusationModal({ onClose }) {
             <div className="glass-strong rounded-2xl p-6 max-w-md w-full">
                 <h2 className="text-xl font-bold text-red-400 mb-2 text-center">⚠️ Make Your Accusation</h2>
                 <p className="text-sm text-gray-400 text-center mb-6">
-                    Choose carefully — this is your final answer. Who killed Richard Blackwood?
+                    Choose carefully — this is your final answer. Who committed the murder?
                 </p>
                 <div className="space-y-3">
-                    {SUSPECT_ORDER.map(id => {
-                        const s = SUSPECTS[id];
-                        return (
-                            <button
-                                key={id}
-                                onClick={() => handleAccuse(id)}
-                                className="w-full flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 transition-all cursor-pointer"
-                            >
-                                <span className="text-3xl">{s.expressions.neutral}</span>
-                                <div className="text-left">
-                                    <div className="font-medium" style={{ color: s.color }}>{s.name}</div>
-                                    <div className="text-xs text-gray-500">{s.role}</div>
-                                </div>
-                            </button>
-                        );
-                    })}
+                    {state.suspects.map(s => (
+                        <button
+                            key={s.id}
+                            onClick={() => handleAccuse(s.id)}
+                            disabled={accusing}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                            <span className="text-3xl">{s.emoji}</span>
+                            <div className="text-left">
+                                <div className="font-medium" style={{ color: s.color }}>{s.name}</div>
+                                <div className="text-xs text-gray-500">{s.profession}</div>
+                            </div>
+                        </button>
+                    ))}
                 </div>
                 <button
                     onClick={onClose}
+                    disabled={accusing}
                     className="w-full mt-4 py-2 rounded-xl bg-white/5 text-gray-400 hover:bg-white/10 transition-all text-sm cursor-pointer"
                 >
                     Cancel — Continue Investigating
@@ -57,45 +65,35 @@ export default function GameScreen() {
 
     return (
         <div className="h-screen flex flex-col">
-            {/* Header Bar */}
+            {/* Header */}
             <div className="glass-strong px-4 py-3 flex items-center justify-between border-b border-white/5">
                 <div className="flex items-center gap-3">
                     <span className="text-xl">🕵️</span>
                     <h1 className="font-bold text-sm md:text-base bg-gradient-to-r from-purple-400 to-purple-300 bg-clip-text text-transparent">
-                        Blackwood Manor Investigation
+                        {state.story?.setting?.name || 'Investigation'}
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
                     <Timer />
-                    <button
-                        onClick={() => dispatch({ type: 'TOGGLE_SOUND' })}
-                        className="text-lg hover:opacity-80 transition-opacity cursor-pointer"
-                        title={state.soundEnabled ? 'Mute sounds' : 'Enable sounds'}
-                    >
+                    <button onClick={() => dispatch({ type: 'TOGGLE_SOUND' })} className="text-lg hover:opacity-80 transition-opacity cursor-pointer">
                         {state.soundEnabled ? '🔊' : '🔇'}
                     </button>
-                    <button
-                        onClick={() => dispatch({ type: 'TOGGLE_VOICE' })}
-                        className="text-lg hover:opacity-80 transition-opacity cursor-pointer"
-                        title={state.voiceOutputEnabled ? 'Disable voice' : 'Enable voice'}
-                    >
+                    <button onClick={() => dispatch({ type: 'TOGGLE_VOICE' })} className="text-lg hover:opacity-80 transition-opacity cursor-pointer">
                         {state.voiceOutputEnabled ? '🎙️' : '🔕'}
                     </button>
                 </div>
             </div>
 
-            {/* Main Layout */}
+            {/* Main 3-panel */}
             <div className="flex-1 flex min-h-0">
-                {/* Left Panel — Suspects */}
+                {/* Left — Suspects */}
                 <div className="w-56 lg:w-64 border-r border-white/5 flex flex-col p-3 gap-2">
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider px-1 mb-1">Suspects</h3>
                     <div className="flex-1 space-y-2 overflow-y-auto">
-                        {SUSPECT_ORDER.map(id => (
-                            <SuspectCard key={id} suspectId={id} />
+                        {state.suspects.map(s => (
+                            <SuspectCard key={s.id} suspect={s} />
                         ))}
                     </div>
-
-                    {/* Accuse Button */}
                     <div className="pt-2 border-t border-white/5">
                         <button
                             onClick={() => setShowAccusation(true)}
@@ -106,12 +104,12 @@ export default function GameScreen() {
                     </div>
                 </div>
 
-                {/* Center Panel — Chat */}
+                {/* Center — Chat */}
                 <div className="flex-1 flex flex-col min-w-0">
                     <ChatInterface />
                 </div>
 
-                {/* Right Panel — Case File */}
+                {/* Right — Case File */}
                 <div className="w-56 lg:w-72 border-l border-white/5 p-3">
                     <CaseFile />
                 </div>
@@ -126,7 +124,6 @@ export default function GameScreen() {
                 </div>
             )}
 
-            {/* Accusation Modal */}
             {showAccusation && <AccusationModal onClose={() => setShowAccusation(false)} />}
         </div>
     );

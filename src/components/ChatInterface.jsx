@@ -1,97 +1,90 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGameState } from '../game/gameState';
-import { SUSPECTS } from '../game/suspects';
-import { DIFFICULTIES } from '../game/difficultySettings';
 import { sendMessage } from '../ai/claudeAPI';
-import { conversationManager } from '../ai/conversationManager';
-import { analyzeMood } from '../ai/moodDetection';
-import { detectEvidence } from '../game/evidenceDetection';
 import { speakText, stopSpeaking } from '../audio/speechSynthesis';
 import { createSpeechRecognition, isSpeechRecognitionSupported } from '../audio/speechRecognition';
 import { playEvidenceChime } from '../audio/soundEffects';
 
 export default function ChatInterface() {
     const { state, dispatch, showToast } = useGameState();
-    const suspect = SUSPECTS[state.selectedSuspect];
     const [inputText, setInputText] = useState('');
-    const [messages, setMessages] = useState([]);
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const chatEndRef = useRef(null);
     const recognitionRef = useRef(null);
-    const prevSuspectRef = useRef(state.selectedSuspect);
 
-    // Update messages when suspect changes
+    const suspect = state.suspects.find(s => s.id === state.selectedSuspect);
+    const messages = state.messages[state.selectedSuspect] || [];
+    const mood = state.currentMood[state.selectedSuspect] || 'neutral';
+
+    const EXPRESSIONS = {
+        neutral: suspect?.emoji || '👤',
+        nervous: '😰', angry: '😠', happy: '😊', thinking: '🤔', defensive: '😤',
+    };
+    const expression = EXPRESSIONS[mood] || suspect?.emoji || '👤';
+
+    // Stop speaking when switching suspects
     useEffect(() => {
-        if (prevSuspectRef.current !== state.selectedSuspect) {
-            prevSuspectRef.current = state.selectedSuspect;
-            stopSpeaking();
-            setIsSpeaking(false);
-        }
-        const history = conversationManager.getHistory(state.selectedSuspect);
-        setMessages(history);
+        stopSpeaking();
+        setIsSpeaking(false);
     }, [state.selectedSuspect]);
 
-    // Auto-scroll
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, state.isLoading]);
 
     const handleSend = async () => {
         const text = inputText.trim();
-        if (!text || state.isLoading) return;
+        if (!text || state.isLoading || !suspect) return;
 
         setInputText('');
-
-        // Add user message
-        conversationManager.addMessage(state.selectedSuspect, 'user', text);
-        const updatedMessages = conversationManager.getHistory(state.selectedSuspect);
-        setMessages([...updatedMessages]);
-
+        dispatch({ type: 'ADD_USER_MESSAGE', payload: { suspectId: suspect.id, text } });
         dispatch({ type: 'SET_LOADING', payload: true });
 
         try {
-            const difficulty = DIFFICULTIES[state.difficulty];
-            const response = await sendMessage(
-                state.apiKey,
-                suspect.systemPrompt,
-                updatedMessages,
-                difficulty.promptModifier
-            );
+            const result = await sendMessage(state.sessionId, suspect.id, text);
 
-            // Add AI response
-            conversationManager.addMessage(state.selectedSuspect, 'assistant', response);
-            const finalMessages = conversationManager.getHistory(state.selectedSuspect);
-            setMessages([...finalMessages]);
+            dispatch({
+                type: 'ADD_AI_MESSAGE',
+                payload: { suspectId: suspect.id, text: result.response, questionCount: result.question_count },
+            });
 
-            // Analyze mood
-            const mood = analyzeMood(response);
-            dispatch({ type: 'SET_MOOD', payload: { suspect: state.selectedSuspect, mood } });
-
-            // Reset mood after 8 seconds
-            if (mood !== 'neutral') {
-                setTimeout(() => {
-                    dispatch({ type: 'SET_MOOD', payload: { suspect: state.selectedSuspect, mood: 'neutral' } });
-                }, 8000);
+            // Mood from backend
+            if (result.mood) {
+                dispatch({
+                    type: 'SET_MOOD',
+                    payload: { suspect: suspect.id, mood: result.mood.mood, tension: result.mood.tension },
+                });
+                // Reset mood display after 8s
+                if (result.mood.mood !== 'neutral') {
+                    setTimeout(() => {
+                        dispatch({ type: 'SET_MOOD', payload: { suspect: suspect.id, mood: 'neutral' } });
+                    }, 8000);
+                }
             }
 
-            // Detect evidence
-            const newEvidence = detectEvidence(text, response, suspect.name, state.evidence);
-            if (newEvidence.length > 0) {
-                dispatch({ type: 'ADD_EVIDENCE', payload: newEvidence });
+            // Evidence from backend
+            if (result.evidence && result.evidence.length > 0) {
+                const mapped = result.evidence.map(e => ({
+                    ...e,
+                    key: `${e.suspect}:${e.label}`,
+                    timestamp: new Date().toLocaleTimeString(),
+                }));
+                dispatch({ type: 'ADD_EVIDENCE', payload: mapped });
                 if (state.soundEnabled) playEvidenceChime();
-                showToast(`🔍 ${newEvidence.length} new clue${newEvidence.length > 1 ? 's' : ''} found!`);
+                showToast(`🔍 New clue${mapped.length > 1 ? 's' : ''} found!`);
             }
 
             // Voice output
-            if (state.voiceOutputEnabled) {
+            if (state.voiceOutputEnabled && suspect.voice_params) {
                 setIsSpeaking(true);
-                speakText(response, suspect.voiceParams, () => setIsSpeaking(false));
+                speakText(result.response, suspect.voice_params, () => setIsSpeaking(false));
             }
-
         } catch (error) {
-            conversationManager.addMessage(state.selectedSuspect, 'assistant', `⚠️ Error: ${error.message}`);
-            setMessages([...conversationManager.getHistory(state.selectedSuspect)]);
+            dispatch({
+                type: 'ADD_AI_MESSAGE',
+                payload: { suspectId: suspect.id, text: `⚠️ Error: ${error.message}` },
+            });
         } finally {
             dispatch({ type: 'SET_LOADING', payload: false });
         }
@@ -103,15 +96,10 @@ export default function ChatInterface() {
             setIsListening(false);
             return;
         }
-
         const recognition = createSpeechRecognition(
-            (transcript) => {
-                setInputText(transcript);
-                setIsListening(false);
-            },
+            (transcript) => { setInputText(transcript); setIsListening(false); },
             () => setIsListening(false)
         );
-
         if (recognition) {
             recognitionRef.current = recognition;
             recognition.start();
@@ -121,8 +109,7 @@ export default function ChatInterface() {
         }
     };
 
-    const mood = state.currentMood[state.selectedSuspect] || 'neutral';
-    const expression = suspect.expressions[mood];
+    if (!suspect) return <div className="flex-1 flex items-center justify-center text-gray-600">Select a suspect</div>;
 
     return (
         <div className="flex flex-col h-full">
@@ -133,13 +120,14 @@ export default function ChatInterface() {
                 </div>
                 <div className="flex-1">
                     <h2 className="font-bold text-lg" style={{ color: suspect.color }}>{suspect.name}</h2>
-                    <p className="text-xs text-gray-500">{suspect.role} • Age {suspect.age}</p>
+                    <p className="text-xs text-gray-500">{suspect.profession} • {suspect.relationship} • Age {suspect.age}</p>
                     {mood !== 'neutral' && (
                         <p className="text-xs mt-1 capitalize" style={{ color: suspect.color }}>
                             {mood === 'nervous' ? 'Seems nervous...' :
                                 mood === 'angry' ? 'Getting agitated...' :
                                     mood === 'thinking' ? 'Thinking carefully...' :
-                                        mood === 'happy' ? 'Appears relieved...' : ''}
+                                        mood === 'happy' ? 'Appears relieved...' :
+                                            mood === 'defensive' ? 'Getting defensive...' : ''}
                         </p>
                     )}
                 </div>
@@ -157,7 +145,7 @@ export default function ChatInterface() {
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                 {messages.length === 0 && (
                     <div className="text-center text-gray-600 mt-16">
-                        <p className="text-4xl mb-3">{suspect.expressions.neutral}</p>
+                        <p className="text-4xl mb-3">{suspect.emoji}</p>
                         <p className="text-sm">Start interrogating {suspect.name.split(' ')[0]}...</p>
                         <p className="text-xs text-gray-700 mt-1">Ask about their alibi, motive, or what they saw</p>
                     </div>
@@ -194,7 +182,7 @@ export default function ChatInterface() {
                 <div ref={chatEndRef} />
             </div>
 
-            {/* Input Area */}
+            {/* Input */}
             <div className="p-3 border-t border-white/5">
                 <div className="flex items-center gap-2">
                     {isSpeechRecognitionSupported() && (
@@ -205,7 +193,6 @@ export default function ChatInterface() {
                                     ? 'bg-red-500/20 text-red-400 animate-pulse-glow border border-red-500/30'
                                     : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/5'
                                 }`}
-                            title={isListening ? 'Stop listening' : 'Start voice input'}
                         >
                             🎤
                         </button>
@@ -215,7 +202,7 @@ export default function ChatInterface() {
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder={isListening ? '🎤 Listening... speak now' : `Ask ${suspect.name.split(' ')[0]} a question...`}
+                        placeholder={isListening ? '🎤 Listening...' : `Ask ${suspect.name.split(' ')[0]} a question...`}
                         disabled={state.isLoading}
                         className="flex-1 bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/30 transition-all disabled:opacity-50"
                     />

@@ -1,13 +1,29 @@
 import { useState } from 'react';
 import { useGameState } from '../game/gameState';
-import { getHint } from '../game/hintGenerator';
-import { conversationManager } from '../ai/conversationManager';
+import { getHint } from '../ai/claudeAPI';
 
 export default function CaseFile() {
     const { state } = useGameState();
     const [showHint, setShowHint] = useState(false);
+    const [hintText, setHintText] = useState('');
+    const [loadingHint, setLoadingHint] = useState(false);
 
-    const hint = getHint(state.evidence, conversationManager.getAllQuestionCounts());
+    const story = state.story;
+    if (!story) return null;
+
+    const handleGetHint = async () => {
+        if (showHint) { setShowHint(false); return; }
+        setShowHint(true);
+        setLoadingHint(true);
+        try {
+            const data = await getHint(state.sessionId);
+            setHintText(data.hint);
+        } catch {
+            setHintText('Keep investigating...');
+        } finally {
+            setLoadingHint(false);
+        }
+    };
 
     return (
         <div className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
@@ -19,21 +35,40 @@ export default function CaseFile() {
                 <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between">
                         <span className="text-gray-500">Victim</span>
-                        <span>Richard Blackwood</span>
+                        <span className="text-right">{story.victim.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-gray-500">Age</span>
+                        <span>{story.victim.age}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-gray-500">Profession</span>
+                        <span>{story.victim.profession}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-gray-500">Time of Death</span>
-                        <span className="text-yellow-400">9:47 PM</span>
+                        <span className="text-yellow-400">{story.murder.time}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-gray-500">Cause</span>
-                        <span className="text-red-400">Cyanide in brandy</span>
+                        <span className="text-gray-500">Method</span>
+                        <span className="text-red-400">{story.murder.method}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-gray-500">Location</span>
-                        <span>Private study</span>
+                        <span>{story.murder.location_detail}</span>
                     </div>
                 </div>
+                {story.victim.description && (
+                    <p className="text-xs text-gray-500 mt-2 italic">{story.victim.description}</p>
+                )}
+            </div>
+
+            {/* Setting */}
+            <div className="glass rounded-xl p-4">
+                <h3 className="text-purple-400 font-bold text-sm mb-1 flex items-center gap-2">
+                    <span>🏚️</span> {story.setting.name}
+                </h3>
+                <p className="text-xs text-gray-500">{story.setting.description}</p>
             </div>
 
             {/* Evidence Board */}
@@ -44,7 +79,7 @@ export default function CaseFile() {
                 {state.evidence.length === 0 ? (
                     <p className="text-gray-600 text-xs italic">No evidence yet. Start questioning suspects...</p>
                 ) : (
-                    <div className="space-y-1.5 overflow-y-auto max-h-64">
+                    <div className="space-y-1.5 overflow-y-auto max-h-48">
                         {state.evidence.map((e, i) => (
                             <div key={i} className="flex items-start gap-2 text-xs animate-fadeIn bg-white/5 rounded-lg px-2 py-1.5">
                                 <span>{e.icon}</span>
@@ -58,10 +93,10 @@ export default function CaseFile() {
                 )}
             </div>
 
-            {/* Hint System */}
+            {/* Hint */}
             <div className="glass rounded-xl p-4">
                 <button
-                    onClick={() => setShowHint(!showHint)}
+                    onClick={handleGetHint}
                     className="w-full text-left text-sm font-bold text-yellow-400 flex items-center gap-2 cursor-pointer"
                 >
                     <span>💡</span>
@@ -70,7 +105,7 @@ export default function CaseFile() {
                 </button>
                 {showHint && (
                     <p className="text-xs text-gray-400 mt-2 leading-relaxed animate-fadeIn">
-                        {hint.text}
+                        {loadingHint ? 'Thinking...' : hintText}
                     </p>
                 )}
             </div>
@@ -80,9 +115,9 @@ export default function CaseFile() {
                 <h3 className="text-purple-400 font-bold text-sm mb-2">🎯 TIPS</h3>
                 <ul className="text-xs text-gray-500 space-y-1">
                     <li>• Ask about alibis and timelines</li>
-                    <li>• Look for emotional reactions</li>
+                    <li>• Watch for emotional reactions</li>
                     <li>• Cross-reference stories</li>
-                    <li>• Press suspects on contradictions</li>
+                    <li>• Press on contradictions</li>
                 </ul>
             </div>
         </div>

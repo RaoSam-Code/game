@@ -1,17 +1,20 @@
 import { useEffect } from 'react';
 import { useGameState } from '../game/gameState';
-import { SUSPECTS } from '../game/suspects';
-import { DIFFICULTIES } from '../game/difficultySettings';
-import { conversationManager } from '../ai/conversationManager';
 import { playVictoryFanfare } from '../audio/soundEffects';
+
+const DIFFICULTY_LABELS = { easy: '🟢 Easy Detective', normal: '🟡 Detective', hard: '🔴 Master Detective' };
+const DIFFICULTY_TIMES = { easy: 1200, normal: 900, hard: 600 };
 
 export default function VictoryScreen() {
     const { state, dispatch } = useGameState();
-    const difficulty = DIFFICULTIES[state.difficulty];
-    const timeUsed = difficulty.time - state.timeRemaining;
+    const result = state.accusationResult;
+    const story = state.story;
+
+    const totalTime = DIFFICULTY_TIMES[state.difficulty] || 900;
+    const timeUsed = totalTime - state.timeRemaining;
     const minutes = Math.floor(timeUsed / 60);
     const seconds = timeUsed % 60;
-    const totalQuestions = conversationManager.getTotalQuestions();
+    const totalQuestions = Object.values(state.questionCounts).reduce((a, b) => a + b, 0);
 
     useEffect(() => {
         if (state.soundEnabled) playVictoryFanfare();
@@ -27,21 +30,17 @@ export default function VictoryScreen() {
                 <p className="text-gray-400 mb-8">Excellent work, Detective!</p>
 
                 <div className="glass rounded-2xl p-6 mb-6 text-left animate-slideUp" style={{ animationDelay: '0.2s' }}>
-                    <h3 className="text-green-400 font-bold mb-3">✅ You correctly identified:</h3>
-                    <div className="flex items-center gap-3 mb-4">
-                        <span className="text-4xl">{SUSPECTS.eleanor.expressions.nervous}</span>
-                        <div>
-                            <div className="font-bold text-lg" style={{ color: SUSPECTS.eleanor.color }}>Dr. Eleanor Hayes</div>
-                            <div className="text-sm text-gray-500">Family Physician</div>
-                        </div>
+                    <h3 className="text-green-400 font-bold mb-3">✅ You correctly identified the killer:</h3>
+                    <div className="mb-4">
+                        <div className="font-bold text-lg text-red-400">{result?.killer?.name}</div>
                     </div>
-
                     <div className="border-t border-white/10 pt-4 space-y-2 text-sm">
                         <h4 className="text-yellow-400 font-bold">THE TRUTH:</h4>
-                        <p className="text-gray-300">Dr. Hayes poisoned Richard's brandy with cyanide at <span className="text-yellow-400">9:45 PM</span>.</p>
-                        <p className="text-gray-400"><strong>Motive:</strong> Richard was blackmailing her over falsified medical records.</p>
-                        <p className="text-gray-400"><strong>Method:</strong> Cyanide in brandy, using her medical knowledge and access.</p>
-                        <p className="text-gray-400"><strong>Key evidence:</strong> Margaret Chen saw her entering the study at 9:45 PM. Her garden alibi was a lie.</p>
+                        <p className="text-gray-400"><strong>Motive:</strong> {result?.killer?.motive}</p>
+                        <p className="text-gray-400"><strong>Method:</strong> {result?.killer?.method}</p>
+                        {result?.key_evidence && (
+                            <p className="text-gray-400"><strong>Key evidence:</strong> {result.key_evidence}</p>
+                        )}
                     </div>
                 </div>
 
@@ -50,7 +49,7 @@ export default function VictoryScreen() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div className="bg-white/5 rounded-xl p-3">
                             <div className="text-gray-500">Difficulty</div>
-                            <div className="font-bold">{difficulty.icon} {difficulty.label}</div>
+                            <div className="font-bold">{DIFFICULTY_LABELS[state.difficulty] || state.difficulty}</div>
                         </div>
                         <div className="bg-white/5 rounded-xl p-3">
                             <div className="text-gray-500">Time Used</div>
@@ -71,7 +70,7 @@ export default function VictoryScreen() {
                     onClick={() => dispatch({ type: 'RESTART' })}
                     className="px-8 py-3 rounded-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all shadow-lg shadow-purple-500/25 cursor-pointer"
                 >
-                    🔄 Play Again
+                    🔄 Play Again (New Mystery)
                 </button>
             </div>
         </div>

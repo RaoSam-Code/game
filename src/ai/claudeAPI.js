@@ -1,40 +1,50 @@
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-export async function sendMessage(apiKey, systemPrompt, messages, difficultyModifier = '') {
-    const fullSystemPrompt = systemPrompt + (difficultyModifier ? `\n\nDIFFICULTY MODIFIER: ${difficultyModifier}` : '');
-
-    // Use env key if no explicit key passed
-    const key = apiKey || import.meta.env.VITE_GROQ_API_KEY;
-    if (!key) throw new Error('No Groq API key found. Set VITE_GROQ_API_KEY in .env');
-
-    try {
-        const response = await fetch(GROQ_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${key}`,
-            },
-            body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                max_tokens: 300,
-                messages: [
-                    { role: 'system', content: fullSystemPrompt },
-                    ...messages,
-                ],
-            }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error?.message || `API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.choices[0].message.content;
-    } catch (error) {
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            throw new Error('Network error. Please check your internet connection.');
-        }
-        throw error;
+export async function createNewGame(difficulty = 'normal') {
+    const response = await fetch(`${API_BASE}/api/new-game`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Failed to create game: ${response.status}`);
     }
+    return response.json();
+}
+
+export async function sendMessage(sessionId, suspectId, message) {
+    const response = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, suspect_id: suspectId, message }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Chat failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+export async function getHint(sessionId) {
+    const response = await fetch(`${API_BASE}/api/hint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!response.ok) return { hint: 'Keep investigating...', priority: 'low' };
+    return response.json();
+}
+
+export async function makeAccusation(sessionId, suspectId) {
+    const response = await fetch(`${API_BASE}/api/accuse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, suspect_id: suspectId }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Accusation failed: ${response.status}`);
+    }
+    return response.json();
 }

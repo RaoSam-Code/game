@@ -1,15 +1,16 @@
 import { createContext, useContext, useReducer, useCallback, useRef, useEffect } from 'react';
-import { SUSPECTS } from './suspects';
-import { DIFFICULTIES } from './difficultySettings';
-import { conversationManager } from '../ai/conversationManager';
 
 const GameContext = createContext(null);
 
+const DIFFICULTY_TIMES = { easy: 1200, normal: 900, hard: 600 };
+
 const initialState = {
-    screen: 'intro', // intro | game | victory | failure
+    screen: 'intro', // intro | loading | game | victory | failure
     difficulty: null,
-    apiKey: '',
-    selectedSuspect: 'victoria',
+    sessionId: null,
+    story: null,       // dynamic from backend
+    suspects: [],      // from backend story
+    selectedSuspect: null,
     evidence: [],
     timeRemaining: 900,
     isTimerRunning: false,
@@ -17,8 +18,11 @@ const initialState = {
     voiceOutputEnabled: true,
     isLoading: false,
     currentMood: {},
-    accusedSuspect: null,
+    tensionLevels: {},
+    accusationResult: null,
     toastMessage: null,
+    messages: {},     // suspect_id -> [{role, content}]
+    questionCounts: {},
 };
 
 function gameReducer(state, action) {
@@ -26,26 +30,67 @@ function gameReducer(state, action) {
         case 'SET_SCREEN':
             return { ...state, screen: action.payload };
         case 'SET_DIFFICULTY':
+            return { ...state, difficulty: action.payload, timeRemaining: DIFFICULTY_TIMES[action.payload] };
+        case 'SET_STORY': {
+            const story = action.payload.story;
+            const suspects = story.suspects || [];
             return {
                 ...state,
-                difficulty: action.payload,
-                timeRemaining: DIFFICULTIES[action.payload].time
+                sessionId: action.payload.session_id,
+                story,
+                suspects,
+                selectedSuspect: suspects[0]?.id || null,
+                screen: 'game',
+                isTimerRunning: true,
+                evidence: [],
+                messages: {},
+                questionCounts: {},
+                currentMood: {},
+                tensionLevels: {},
+                accusationResult: null,
+                timeRemaining: DIFFICULTY_TIMES[state.difficulty] || 900,
             };
-        case 'SET_API_KEY':
-            return { ...state, apiKey: action.payload };
+        }
         case 'SELECT_SUSPECT':
             return { ...state, selectedSuspect: action.payload };
-        case 'ADD_EVIDENCE':
+        case 'ADD_USER_MESSAGE': {
+            const sid = action.payload.suspectId;
+            const msgs = state.messages[sid] || [];
             return {
                 ...state,
-                evidence: [...state.evidence, ...action.payload]
+                messages: { ...state.messages, [sid]: [...msgs, { role: 'user', content: action.payload.text }] },
             };
-        case 'TICK_TIMER':
-            const newTime = state.timeRemaining - 1;
-            if (newTime <= 0) {
-                return { ...state, timeRemaining: 0, isTimerRunning: false, screen: 'failure' };
-            }
-            return { ...state, timeRemaining: newTime };
+        }
+        case 'ADD_AI_MESSAGE': {
+            const sid = action.payload.suspectId;
+            const msgs = state.messages[sid] || [];
+            return {
+                ...state,
+                messages: { ...state.messages, [sid]: [...msgs, { role: 'assistant', content: action.payload.text }] },
+                questionCounts: { ...state.questionCounts, [sid]: action.payload.questionCount || (state.questionCounts[sid] || 0) + 1 },
+            };
+        }
+        case 'SET_MOOD':
+            return {
+                ...state,
+                currentMood: { ...state.currentMood, [action.payload.suspect]: action.payload.mood },
+                tensionLevels: action.payload.tension !== undefined
+                    ? { ...state.tensionLevels, [action.payload.suspect]: action.payload.tension }
+                    : state.tensionLevels,
+            };
+        case 'ADD_EVIDENCE': {
+            // Deduplicate by key
+            const newEvidence = action.payload.filter(
+                e => !state.evidence.some(existing => existing.suspect === e.suspect && existing.label === e.label)
+            );
+            if (newEvidence.length === 0) return state;
+            return { ...state, evidence: [...state.evidence, ...newEvidence] };
+        }
+        case 'TICK_TIMER': {
+            const t = state.timeRemaining - 1;
+            if (t <= 0) return { ...state, timeRemaining: 0, isTimerRunning: false, screen: 'failure' };
+            return { ...state, timeRemaining: t };
+        }
         case 'START_TIMER':
             return { ...state, isTimerRunning: true };
         case 'STOP_TIMER':
@@ -56,42 +101,19 @@ function gameReducer(state, action) {
             return { ...state, voiceOutputEnabled: !state.voiceOutputEnabled };
         case 'SET_LOADING':
             return { ...state, isLoading: action.payload };
-        case 'SET_MOOD':
+        case 'SET_ACCUSATION_RESULT':
             return {
                 ...state,
-                currentMood: { ...state.currentMood, [action.payload.suspect]: action.payload.mood }
-            };
-        case 'ACCUSE':
-            const suspect = SUSPECTS[action.payload];
-            return {
-                ...state,
-                accusedSuspect: action.payload,
+                accusationResult: action.payload,
                 isTimerRunning: false,
-                screen: suspect.isGuilty ? 'victory' : 'failure'
+                screen: action.payload.correct ? 'victory' : 'failure',
             };
         case 'SHOW_TOAST':
             return { ...state, toastMessage: action.payload };
         case 'HIDE_TOAST':
             return { ...state, toastMessage: null };
-        case 'START_GAME':
-            return {
-                ...state,
-                screen: 'game',
-                isTimerRunning: true,
-                evidence: [],
-                currentMood: {},
-                accusedSuspect: null,
-                selectedSuspect: 'victoria',
-                timeRemaining: DIFFICULTIES[state.difficulty].time,
-            };
         case 'RESTART':
-            conversationManager.reset();
-            return {
-                ...initialState,
-                apiKey: state.apiKey,
-                soundEnabled: state.soundEnabled,
-                voiceOutputEnabled: state.voiceOutputEnabled,
-            };
+            return { ...initialState, soundEnabled: state.soundEnabled, voiceOutputEnabled: state.voiceOutputEnabled };
         default:
             return state;
     }
@@ -101,33 +123,23 @@ export function GameStateProvider({ children }) {
     const [state, dispatch] = useReducer(gameReducer, initialState);
     const timerRef = useRef(null);
 
-    // Timer effect
     useEffect(() => {
         if (state.isTimerRunning) {
-            timerRef.current = setInterval(() => {
-                dispatch({ type: 'TICK_TIMER' });
-            }, 1000);
-        } else {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
+            timerRef.current = setInterval(() => dispatch({ type: 'TICK_TIMER' }), 1000);
+        } else if (timerRef.current) {
+            clearInterval(timerRef.current);
         }
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }, [state.isTimerRunning]);
 
-    // Toast auto-hide
     useEffect(() => {
         if (state.toastMessage) {
-            const timer = setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 3000);
-            return () => clearTimeout(timer);
+            const t = setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 3000);
+            return () => clearTimeout(t);
         }
     }, [state.toastMessage]);
 
-    const showToast = useCallback((msg) => {
-        dispatch({ type: 'SHOW_TOAST', payload: msg });
-    }, []);
+    const showToast = useCallback((msg) => dispatch({ type: 'SHOW_TOAST', payload: msg }), []);
 
     return (
         <GameContext.Provider value={{ state, dispatch, showToast }}>
