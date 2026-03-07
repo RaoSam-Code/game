@@ -4,26 +4,28 @@ import { playClockTick } from '../audio/soundEffects';
 
 export default function Timer() {
     const { state } = useGameState();
-    const prevTimeRef = useRef(state.timeRemaining);
-
+    const lastTickRef = useRef(null);
     const minutes = Math.floor(state.timeRemaining / 60);
     const seconds = state.timeRemaining % 60;
-    const isLow = state.timeRemaining <= 60;
+    const isUrgent = state.timeRemaining <= 60;
     const isCritical = state.timeRemaining <= 30;
 
-    // Clock tick when under 60 seconds
     useEffect(() => {
-        if (isLow && state.soundEnabled && state.isTimerRunning && state.timeRemaining !== prevTimeRef.current) {
-            playClockTick();
+        if (isUrgent && state.soundEnabled && state.isTimerRunning) {
+            if (lastTickRef.current !== state.timeRemaining) {
+                playClockTick();
+                lastTickRef.current = state.timeRemaining;
+            }
         }
-        prevTimeRef.current = state.timeRemaining;
-    }, [state.timeRemaining, isLow, state.soundEnabled, state.isTimerRunning]);
+    }, [state.timeRemaining, isUrgent, state.soundEnabled, state.isTimerRunning]);
 
     return (
-        <div className={`font-mono text-lg font-bold flex items-center gap-2 transition-colors duration-300 ${isCritical ? 'text-red-400 animate-pulse' : isLow ? 'text-yellow-400' : 'text-gray-300'
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500 ${isCritical ? 'bg-danger/20 border-danger/40 text-danger animate-pulse' :
+                isUrgent ? 'bg-warning/20 border-warning/40 text-warning' :
+                    'bg-bg-card/40 border-border-subtle text-text-secondary'
             }`}>
-            <span>⏱️</span>
-            <span>{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>timer</span>
+            <span className="font-bold text-sm tabular-nums tracking-wide">{minutes}:{seconds.toString().padStart(2, '0')}</span>
         </div>
     );
 }

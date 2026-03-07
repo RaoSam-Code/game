@@ -26,66 +26,67 @@ export default function CaseFile() {
     };
 
     return (
-        <div className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
-            {/* Victim Info */}
+        <div className="h-full flex flex-col gap-3 overflow-y-auto pr-1">
+            {/* Case File */}
             <div className="glass rounded-xl p-4">
-                <h3 className="text-yellow-400 font-bold text-sm mb-2 flex items-center gap-2">
-                    <span>📋</span> CASE FILE
+                <h3 className="text-primary text-[10px] font-bold uppercase tracking-[0.15em] mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>description</span>
+                    Case File
                 </h3>
-                <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Victim</span>
-                        <span className="text-right">{story.victim.name}</span>
+                <div className="space-y-2 text-xs">
+                    <div className="flex justify-between items-center">
+                        <span className="text-text-muted">Victim</span>
+                        <span className="text-text-primary font-medium">{story.victim.name}</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Age</span>
-                        <span>{story.victim.age}</span>
+                    <div className="flex justify-between items-center">
+                        <span className="text-text-muted">Age</span>
+                        <span className="text-text-secondary">{story.victim.age}</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Profession</span>
-                        <span>{story.victim.profession}</span>
+                    <div className="flex justify-between items-center">
+                        <span className="text-text-muted">Profession</span>
+                        <span className="text-text-secondary">{story.victim.profession}</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Time of Death</span>
-                        <span className="text-yellow-400">{story.murder.time}</span>
+                    <div className="h-px bg-border-subtle my-1" />
+                    <div className="flex justify-between items-center">
+                        <span className="text-text-muted">Time of Death</span>
+                        <span className="text-warning font-medium">{story.murder.time}</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Method</span>
-                        <span className="text-red-400">{story.murder.method}</span>
+                    <div className="flex justify-between items-center">
+                        <span className="text-text-muted">Method</span>
+                        <span className="text-danger font-medium text-right text-[11px]">{story.murder.method}</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Location</span>
-                        <span>{story.murder.location_detail}</span>
+                    <div className="flex justify-between items-center">
+                        <span className="text-text-muted">Location</span>
+                        <span className="text-text-secondary text-right">{story.murder.location_detail}</span>
                     </div>
                 </div>
-                {story.victim.description && (
-                    <p className="text-xs text-gray-500 mt-2 italic">{story.victim.description}</p>
-                )}
             </div>
 
             {/* Setting */}
             <div className="glass rounded-xl p-4">
-                <h3 className="text-purple-400 font-bold text-sm mb-1 flex items-center gap-2">
-                    <span>🏚️</span> {story.setting.name}
+                <h3 className="text-primary text-[10px] font-bold uppercase tracking-[0.15em] mb-2 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>location_on</span>
+                    {story.setting.name}
                 </h3>
-                <p className="text-xs text-gray-500">{story.setting.description}</p>
+                <p className="text-xs text-text-muted leading-relaxed">{story.setting.description}</p>
             </div>
 
             {/* Evidence Board */}
             <div className="glass rounded-xl p-4 flex-1 min-h-0">
-                <h3 className="text-green-400 font-bold text-sm mb-2 flex items-center gap-2">
-                    <span>🔍</span> EVIDENCE ({state.evidence.length})
+                <h3 className="text-primary text-[10px] font-bold uppercase tracking-[0.15em] mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>search</span>
+                    Evidence ({state.evidence.length})
                 </h3>
                 {state.evidence.length === 0 ? (
-                    <p className="text-gray-600 text-xs italic">No evidence yet. Start questioning suspects...</p>
+                    <p className="text-text-muted text-xs italic">No evidence yet. Start questioning...</p>
                 ) : (
                     <div className="space-y-1.5 overflow-y-auto max-h-48">
                         {state.evidence.map((e, i) => (
-                            <div key={i} className="flex items-start gap-2 text-xs animate-fadeIn bg-white/5 rounded-lg px-2 py-1.5">
+                            <div key={i} className="flex items-start gap-2 text-xs animate-fadeIn bg-bg-card/40 rounded-lg px-2.5 py-2 border border-border-subtle">
                                 <span>{e.icon}</span>
                                 <div className="flex-1 min-w-0">
-                                    <span className="text-gray-300">{e.label}</span>
-                                    <span className="text-gray-600 block truncate">— {e.suspect}</span>
+                                    <span className="text-text-primary text-[11px]">{e.label}</span>
+                                    <span className="text-text-muted block truncate text-[10px]">— {e.suspect}</span>
                                 </div>
                             </div>
                         ))}
@@ -97,28 +98,19 @@ export default function CaseFile() {
             <div className="glass rounded-xl p-4">
                 <button
                     onClick={handleGetHint}
-                    className="w-full text-left text-sm font-bold text-yellow-400 flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left text-xs font-bold text-warning flex items-center gap-1.5 cursor-pointer uppercase tracking-wider"
                 >
-                    <span>💡</span>
-                    <span>{showHint ? 'HIDE HINT' : 'NEED A HINT?'}</span>
-                    <span className="text-xs font-normal text-gray-600 ml-auto">{showHint ? '▲' : '▼'}</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>lightbulb</span>
+                    <span>{showHint ? 'Hide Hint' : 'Need a Hint?'}</span>
+                    <span className="material-symbols-outlined ml-auto text-text-muted" style={{ fontSize: '14px' }}>
+                        {showHint ? 'expand_less' : 'expand_more'}
+                    </span>
                 </button>
                 {showHint && (
-                    <p className="text-xs text-gray-400 mt-2 leading-relaxed animate-fadeIn">
+                    <p className="text-xs text-text-muted mt-2 leading-relaxed animate-fadeIn">
                         {loadingHint ? 'Thinking...' : hintText}
                     </p>
                 )}
-            </div>
-
-            {/* Tips */}
-            <div className="glass rounded-xl p-4">
-                <h3 className="text-purple-400 font-bold text-sm mb-2">🎯 TIPS</h3>
-                <ul className="text-xs text-gray-500 space-y-1">
-                    <li>• Ask about alibis and timelines</li>
-                    <li>• Watch for emotional reactions</li>
-                    <li>• Cross-reference stories</li>
-                    <li>• Press on contradictions</li>
-                </ul>
             </div>
         </div>
     );
